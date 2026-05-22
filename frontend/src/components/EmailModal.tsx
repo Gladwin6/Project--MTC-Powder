@@ -6,10 +6,11 @@ import type { Press } from '@/lib/presses';
 interface Props {
   alloy: Alloy;
   press: Press;
+  jobId: string | null;
   onClose: () => void;
 }
 
-export function EmailModal({ alloy, press, onClose }: Props) {
+export function EmailModal({ alloy, press, jobId, onClose }: Props) {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
@@ -33,6 +34,11 @@ export function EmailModal({ alloy, press, onClose }: Props) {
             <p className="modal-sent-sub">
               {alloy.name} · {press.name} — {email}
             </p>
+            {jobId && (
+              <p className="modal-sent-sub" style={{ marginTop: 6, opacity: 0.6, fontSize: 10 }}>
+                Job {jobId.slice(0, 8)}
+              </p>
+            )}
           </>
         ) : (
           <>

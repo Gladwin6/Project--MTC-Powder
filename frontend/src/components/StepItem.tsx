@@ -9,6 +9,7 @@ interface Props {
   onActivate: () => void;
   onCta: () => void;
   isLast: boolean;
+  advancing?: boolean;
 }
 
 const BADGE_LABELS: Record<string, string> = {
@@ -20,7 +21,7 @@ const BADGE_LABELS: Record<string, string> = {
   jig: 'jig',
 };
 
-export function StepItem({ step, active, completed, onActivate, onCta, isLast }: Props) {
+export function StepItem({ step, active, completed, onActivate, onCta, isLast, advancing }: Props) {
   return (
     <div
       className={`step-item${active ? ' step-active' : ''}${completed ? ' step-done' : ''}`}
@@ -46,10 +47,11 @@ export function StepItem({ step, active, completed, onActivate, onCta, isLast }:
             <p className="step-ref">{step.refCite}</p>
           )}
           <button
-            className={`step-cta${isLast ? ' cta-send' : ''}`}
+            className={`step-cta${isLast ? ' cta-send' : ''}${advancing ? ' cta-loading' : ''}`}
             onClick={e => { e.stopPropagation(); onCta(); }}
+            disabled={advancing}
           >
-            {step.ctaLabel}
+            {advancing ? 'Saving…' : step.ctaLabel}
           </button>
         </div>
       )}

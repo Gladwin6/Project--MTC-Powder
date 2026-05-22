@@ -1,14 +1,15 @@
 'use client';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { CadViewport } from './CadViewport';
 import { StepItem } from './StepItem';
 import { MaterialPicker } from './MaterialPicker';
 import { PressPicker } from './PressPicker';
 import { EmailModal } from './EmailModal';
 import { buildSteps } from '@/lib/steps';
-import { getAlloyById, ALLOYS, type Alloy } from '@/lib/alloys';
+import { getAlloyById, type Alloy } from '@/lib/alloys';
 import { getPressById, type Press } from '@/lib/presses';
 import { ORANGE } from '@/lib/constants';
+import { api, type Job, jobStatusToStep } from '@/lib/api';
 import type { SceneHandle } from '@/hooks/useScene';
 
 const DEFAULT_ALLOY = getAlloyById('duplex_2507');
@@ -20,28 +21,81 @@ export function HanomiPanel() {
   const [activeStep, setActiveStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [job, setJob] = useState<Job | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [advancing, setAdvancing] = useState(false);
   const sceneRef = useRef<SceneHandle | null>(null);
+  const jobCreatingRef = useRef(false);
 
   const steps = buildSteps(alloy, press);
 
+  // Create a job whenever alloy or press changes
+  useEffect(() => {
+    if (jobCreatingRef.current) return;
+    jobCreatingRef.current = true;
+    setApiError(null);
+    api.createJob({ alloy_id: alloy.id, press_id: press.id })
+      .then(j => {
+        setJob(j);
+        const step = jobStatusToStep(j.status);
+        setActiveStep(step);
+        sceneRef.current?.showStep(step);
+      })
+      .catch(err => {
+        setApiError((err as Error).message);
+      })
+      .finally(() => { jobCreatingRef.current = false; });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alloy.id, press.id]);
+
   const handleReady = useCallback((handle: SceneHandle) => {
     sceneRef.current = handle;
-    handle.showStep(1);
-  }, []);
+    handle.showStep(activeStep);
+  }, [activeStep]);
 
   function activateStep(n: number) {
     setActiveStep(n);
     sceneRef.current?.showStep(n);
   }
 
-  function handleCta(stepId: number) {
+  async function handleCta(stepId: number) {
     if (stepId === 6) {
       setShowEmailModal(true);
       return;
     }
+
     setCompletedSteps(prev => new Set(prev).add(stepId));
     const next = stepId + 1;
     activateStep(next);
+
+    // Advance job in backend if we have one
+    if (job && !advancing) {
+      setAdvancing(true);
+      try {
+        const updated = await api.advanceJob(job.id);
+        setJob(updated);
+      } catch (err) {
+        setApiError((err as Error).message);
+      } finally {
+        setAdvancing(false);
+      }
+    }
+  }
+
+  function handleAlloyChange(a: Alloy) {
+    setAlloy(a);
+    setJob(null);
+    setCompletedSteps(new Set());
+    setActiveStep(1);
+    sceneRef.current?.showStep(1);
+  }
+
+  function handlePressChange(p: Press) {
+    setPress(p);
+    setJob(null);
+    setCompletedSteps(new Set());
+    setActiveStep(1);
+    sceneRef.current?.showStep(1);
   }
 
   return (
@@ -64,14 +118,31 @@ export function HanomiPanel() {
         <h1 className="panel-title">NNS-HIP Pipeline</h1>
         <p className="panel-sub">Vetco gooseneck · subsea · PM-HIP NNS</p>
 
+        {/* Job status chip */}
+        {job && (
+          <div className="job-chip">
+            <span className="job-chip-dot" />
+            <span className="job-chip-id">{job.id.slice(0, 8)}</span>
+            <span className="job-chip-status">{job.status.replace('_', ' ')}</span>
+          </div>
+        )}
+        {apiError && (
+          <div className="api-error">
+            <span>⚠ backend offline</span>
+            <button onClick={() => setApiError(null)}>×</button>
+          </div>
+        )}
+
         {/* Material picker */}
         <div className="section-label">ALLOY</div>
-        <div className="alloy-name">{alloy.name} <span className="alloy-uns">{alloy.uns}</span></div>
-        <MaterialPicker selected={alloy} onChange={a => { setAlloy(a); }} />
+        <div className="alloy-name">
+          {alloy.name} <span className="alloy-uns">{alloy.uns}</span>
+        </div>
+        <MaterialPicker selected={alloy} onChange={handleAlloyChange} />
 
         {/* Press picker */}
         <div className="section-label" style={{ marginTop: 16 }}>PRESS</div>
-        <PressPicker selected={press} onChange={setPress} />
+        <PressPicker selected={press} onChange={handlePressChange} />
 
         <div className="divider" />
 
@@ -86,6 +157,7 @@ export function HanomiPanel() {
               onActivate={() => activateStep(step.id)}
               onCta={() => handleCta(step.id)}
               isLast={step.id === 6}
+              advancing={advancing && activeStep === step.id}
             />
           ))}
         </div>
@@ -101,6 +173,7 @@ export function HanomiPanel() {
         <EmailModal
           alloy={alloy}
           press={press}
+          jobId={job?.id ?? null}
           onClose={() => setShowEmailModal(false)}
         />
       )}
