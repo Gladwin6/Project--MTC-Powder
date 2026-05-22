@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+.env
+*.env
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+.vercel/
+
+# Database
+*.db
+*.sqlite
+
+# Secrets
+.env.local
+.env.*.local
+secrets/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# CAD outputs
+*.sldprt
+*.sldasm
+*.slddrw
+*.step
+*.stp
+output/
+
+# Logs
+*.log
+logs/
