@@ -20,7 +20,7 @@ class Job(Base):
     __tablename__ = "jobs"
 
     id = Column(String, primary_key=True)
-    status = Column(Enum(JobStatus), default=JobStatus.PENDING, nullable=False)
+    status = Column(Enum(JobStatus, native_enum=False), default=JobStatus.PENDING, nullable=False)
 
     # Input
     step_file_name = Column(String)
