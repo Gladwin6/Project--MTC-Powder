@@ -192,6 +192,9 @@ export function HanomiPanel() {
               advancing={advancing && activeStep === step.id}
               jobId={job?.id ?? null}
               onUploaded={handleUploaded}
+              computedResults={
+                (job?.step_params?.[`step_${step.id}_results`] as Record<string, string>) ?? undefined
+              }
             />
           ))}
         </div>

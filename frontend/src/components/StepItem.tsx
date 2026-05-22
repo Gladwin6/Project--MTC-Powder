@@ -1,8 +1,9 @@
 'use client';
 import type { PipelineStep } from '@/lib/steps';
-import type { UploadResult } from '@/lib/api';
+import type { UploadResult, StepResults } from '@/lib/api';
 import { ParamsTable } from './ParamsTable';
 import { StepFileUpload } from './StepFileUpload';
+import { ComputedResults } from './ComputedResults';
 
 interface Props {
   step: PipelineStep;
@@ -14,6 +15,7 @@ interface Props {
   advancing?: boolean;
   jobId?: string | null;
   onUploaded?: (r: UploadResult) => void;
+  computedResults?: StepResults;
 }
 
 const BADGE_LABELS: Record<string, string> = {
@@ -26,7 +28,7 @@ const BADGE_LABELS: Record<string, string> = {
 };
 
 export function StepItem({
-  step, active, completed, onActivate, onCta, isLast, advancing, jobId, onUploaded,
+  step, active, completed, onActivate, onCta, isLast, advancing, jobId, onUploaded, computedResults,
 }: Props) {
   return (
     <div
@@ -57,6 +59,11 @@ export function StepItem({
           )}
 
           <ParamsTable params={step.params} />
+
+          {computedResults && Object.keys(computedResults).length > 0 && (
+            <ComputedResults results={computedResults} label="Engine output" />
+          )}
+
           {step.refCite && (
             <p className="step-ref">{step.refCite}</p>
           )}

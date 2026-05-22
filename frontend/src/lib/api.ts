@@ -6,6 +6,8 @@ export type JobStatus =
   | 'pending' | 'step_1' | 'step_2' | 'step_3'
   | 'step_4' | 'step_5' | 'step_6' | 'complete' | 'failed';
 
+export type StepResults = Record<string, string>;
+
 export interface Job {
   id: string;
   status: JobStatus;
@@ -18,7 +20,15 @@ export interface Job {
   mass_post_machining_kg: number | null;
   bounding_box: { x: number; y: number; z: number } | null;
   acceptance_criteria: Array<{ label: string; value: string; standard: string }>;
-  step_params: Record<string, unknown>;
+  step_params: {
+    step_1_results?: StepResults;
+    step_2_results?: StepResults;
+    step_3_results?: StepResults;
+    step_4_results?: StepResults;
+    step_5_results?: StepResults;
+    step_6_results?: StepResults;
+    [key: string]: unknown;
+  };
   created_at: string;
   updated_at: string | null;
   error_message: string | null;

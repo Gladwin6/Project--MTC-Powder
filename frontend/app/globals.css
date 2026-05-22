@@ -372,6 +372,47 @@ body {
 .step-done .step-num { color: var(--green); }
 
 /* ── Panel footer ────────────────────────────────────────────────────────── */
+/* ── Computed results box ────────────────────────────────────────────────── */
+.computed-box {
+  background: rgba(232,98,0,0.04);
+  border: 1px solid rgba(232,98,0,0.15);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.computed-label {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 6px;
+}
+
+.computed-table {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  font-size: 10.5px;
+}
+
+.computed-row { display: contents; }
+
+.computed-key {
+  color: var(--muted);
+  font-weight: 500;
+  padding: 2px 0;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.computed-val {
+  color: var(--text);
+  padding: 2px 0;
+  word-break: break-word;
+  font-size: 10.5px;
+}
+
 /* ── File upload zone ────────────────────────────────────────────────────── */
 .upload-input-hidden {
   display: none;
