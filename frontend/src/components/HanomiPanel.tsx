@@ -26,7 +26,6 @@ export function HanomiPanel() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const sceneRef = useRef<SceneHandle | null>(null);
-  const jobCreatingRef = useRef(false);
 
   const rawSteps = buildSteps(alloy, press);
   const steps = uploadedFile
@@ -39,20 +38,24 @@ export function HanomiPanel() {
 
   // Create a job whenever alloy or press changes
   useEffect(() => {
-    if (jobCreatingRef.current) return;
-    jobCreatingRef.current = true;
+    let cancelled = false;
     setApiError(null);
+    setJob(null);
+
     api.createJob({ alloy_id: alloy.id, press_id: press.id })
       .then(j => {
+        if (cancelled) return;
         setJob(j);
         const step = jobStatusToStep(j.status);
         setActiveStep(step);
         sceneRef.current?.showStep(step);
       })
       .catch(err => {
+        if (cancelled) return;
         setApiError((err as Error).message);
-      })
-      .finally(() => { jobCreatingRef.current = false; });
+      });
+
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alloy.id, press.id]);
 
@@ -90,10 +93,23 @@ export function HanomiPanel() {
     }
   }
 
-  function handleUploaded(r: UploadResult) {
+  async function handleUploaded(r: UploadResult) {
     setUploadedFile(r.file_name);
-    // update local job file name immediately
     setJob(prev => prev ? { ...prev, step_file_name: r.file_name } : prev);
+
+    // Mark step 1 complete and jump to step 2 (show blank in viewport)
+    setCompletedSteps(prev => new Set(prev).add(1));
+    activateStep(2);
+
+    // Advance job status in backend
+    if (job) {
+      try {
+        const updated = await api.advanceJob(job.id, { step_file: r.file_name });
+        setJob(updated);
+      } catch {
+        // non-blocking — UI already advanced
+      }
+    }
   }
 
   function handleAlloyChange(a: Alloy) {

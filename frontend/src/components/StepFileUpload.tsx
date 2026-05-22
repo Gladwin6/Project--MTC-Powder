@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { api, type UploadResult } from '@/lib/api';
 
 interface Props {
@@ -7,7 +7,7 @@ interface Props {
   onUploaded: (result: UploadResult) => void;
 }
 
-type State = 'idle' | 'dragging' | 'uploading' | 'done' | 'error';
+type State = 'waiting-job' | 'idle' | 'dragging' | 'uploading' | 'done' | 'error';
 
 function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
@@ -16,21 +16,35 @@ function formatBytes(b: number) {
 }
 
 export function StepFileUpload({ jobId, onUploaded }: Props) {
-  const [state, setState] = useState<State>('idle');
+  const [state, setState] = useState<State>(jobId ? 'idle' : 'waiting-job');
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // hold a file that arrived while job was still being created
+  const pendingFileRef = useRef<File | null>(null);
 
-  const upload = useCallback(async (file: File) => {
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext !== 'step' && ext !== 'stp') {
-      setError(`Wrong file type: .${ext ?? '?'} — only .step / .stp accepted`);
-      setState('error');
+  // When jobId arrives (async), auto-upload any pending file
+  useEffect(() => {
+    if (!jobId) {
+      setState(s => s === 'done' ? s : 'waiting-job');
       return;
     }
-    if (!jobId) {
-      setError('No job active — select an alloy first');
+    if (state === 'waiting-job' || state === 'idle') {
+      setState('idle');
+    }
+    if (pendingFileRef.current) {
+      const f = pendingFileRef.current;
+      pendingFileRef.current = null;
+      upload(f, jobId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
+  const upload = useCallback(async (file: File, jid: string) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'step' && ext !== 'stp') {
+      setError(`Wrong file type ".${ext ?? '?'}" — only .step / .stp accepted`);
       setState('error');
       return;
     }
@@ -39,11 +53,9 @@ export function StepFileUpload({ jobId, onUploaded }: Props) {
     setError(null);
     setProgress(0);
 
-    // Fake progress while real upload runs (XHR would give real progress,
-    // but fetch is simpler and this is a small file in practice)
-    const ticker = setInterval(() => setProgress(p => Math.min(p + 8, 88)), 120);
+    const ticker = setInterval(() => setProgress(p => Math.min(p + 9, 88)), 120);
     try {
-      const r = await api.uploadStep(jobId, file);
+      const r = await api.uploadStep(jid, file);
       clearInterval(ticker);
       setProgress(100);
       setResult(r);
@@ -54,28 +66,42 @@ export function StepFileUpload({ jobId, onUploaded }: Props) {
       setError((err as Error).message);
       setState('error');
     }
-  }, [jobId, onUploaded]);
+  }, [onUploaded]);
+
+  function handleFile(file: File) {
+    if (!jobId) {
+      // Job not ready yet — queue the file and show uploading immediately
+      pendingFileRef.current = file;
+      setState('uploading');
+      setProgress(0);
+      return;
+    }
+    upload(file, jobId);
+  }
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setState('idle');
     const file = e.dataTransfer.files[0];
-    if (file) upload(file);
-  }, [upload]);
+    if (file) handleFile(file);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, upload]);
 
   const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) upload(file);
+    if (file) handleFile(file);
     e.target.value = '';
-  }, [upload]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, upload]);
 
   if (state === 'done' && result) {
     return (
       <div className="upload-done">
-        <span className="upload-done-icon">✓</span>
+        <div className="upload-done-icon">✓</div>
         <div className="upload-done-info">
           <span className="upload-done-name">{result.file_name}</span>
-          <span className="upload-done-meta">{formatBytes(result.size_bytes)} · uploaded</span>
+          <span className="upload-done-meta">{formatBytes(result.size_bytes)} · uploaded to job</span>
         </div>
         <button
           className="upload-replace"
@@ -87,17 +113,35 @@ export function StepFileUpload({ jobId, onUploaded }: Props) {
     );
   }
 
+  const isUploading = state === 'uploading';
+  const isWaiting = state === 'waiting-job';
+  const isDragging = state === 'dragging';
+  const isError = state === 'error';
+
   return (
     <div
-      className={`upload-zone${state === 'dragging' ? ' dragging' : ''}${state === 'uploading' ? ' uploading' : ''}${state === 'error' ? ' upload-err' : ''}`}
-      onDragEnter={e => { e.preventDefault(); setState('dragging'); }}
-      onDragOver={e => { e.preventDefault(); setState('dragging'); }}
-      onDragLeave={e => { e.preventDefault(); setState(s => s === 'dragging' ? 'idle' : s); }}
+      className={[
+        'upload-zone',
+        isDragging ? 'dragging' : '',
+        isUploading ? 'uploading' : '',
+        isError ? 'upload-err' : '',
+        isWaiting ? 'upload-waiting' : '',
+      ].filter(Boolean).join(' ')}
+      onDragEnter={e => { e.preventDefault(); e.stopPropagation(); if (!isUploading) setState('dragging'); }}
+      onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (!isUploading) setState('dragging'); }}
+      onDragLeave={e => {
+        e.preventDefault();
+        // only leave if we left the zone entirely (not entering a child)
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setState(s => s === 'dragging' ? 'idle' : s);
+        }
+      }}
       onDrop={onDrop}
-      onClick={() => state !== 'uploading' && inputRef.current?.click()}
+      onClick={() => !isUploading && !isWaiting && inputRef.current?.click()}
       role="button"
       tabIndex={0}
-      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && inputRef.current?.click()}
+      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && !isUploading && !isWaiting && inputRef.current?.click()}
+      aria-label="Upload STEP file"
     >
       <input
         ref={inputRef}
@@ -107,7 +151,7 @@ export function StepFileUpload({ jobId, onUploaded }: Props) {
         onChange={onFileChange}
       />
 
-      {state === 'uploading' ? (
+      {isUploading && (
         <>
           <div className="upload-spinner" />
           <span className="upload-label">Uploading…</span>
@@ -115,22 +159,32 @@ export function StepFileUpload({ jobId, onUploaded }: Props) {
             <div className="upload-progress-fill" style={{ width: `${progress}%` }} />
           </div>
         </>
-      ) : (
+      )}
+
+      {isWaiting && (
+        <>
+          <div className="upload-spinner upload-spinner-slow" />
+          <span className="upload-label">Starting job…</span>
+          <span className="upload-hint">Drop your file — it will upload automatically</span>
+        </>
+      )}
+
+      {!isUploading && !isWaiting && (
         <>
           <div className="upload-icon">
-            {state === 'error' ? '⚠' : state === 'dragging' ? '↓' : '↑'}
+            {isError ? '⚠' : isDragging ? '↓' : '↑'}
           </div>
           <span className="upload-label">
-            {state === 'error'
+            {isError
               ? error
-              : state === 'dragging'
+              : isDragging
               ? 'Drop to upload'
               : 'Drop .step / .stp or click to browse'}
           </span>
-          {state !== 'error' && (
+          {!isError && (
             <span className="upload-hint">STEP-only · max 512 MB · no native CAD files</span>
           )}
-          {state === 'error' && (
+          {isError && (
             <button
               className="upload-retry"
               onClick={e => { e.stopPropagation(); setState('idle'); setError(null); }}
