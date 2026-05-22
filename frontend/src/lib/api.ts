@@ -45,6 +45,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface UploadResult {
+  job_id: string;
+  file_name: string;
+  saved_as: string;
+  size_bytes: number;
+  status: JobStatus;
+}
+
 export const api = {
   createJob: (payload: CreateJobPayload) =>
     request<Job>('/jobs/', { method: 'POST', body: JSON.stringify(payload) }),
@@ -60,6 +68,17 @@ export const api = {
 
   listJobs: () =>
     request<Job[]>('/jobs/'),
+
+  uploadStep: async (jobId: string, file: File): Promise<UploadResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${BASE}/jobs/${jobId}/upload`, { method: 'POST', body: form });
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`Upload ${res.status}: ${text}`);
+    }
+    return res.json() as Promise<UploadResult>;
+  },
 };
 
 export function jobStatusToStep(status: JobStatus): number {

@@ -1,6 +1,8 @@
 'use client';
 import type { PipelineStep } from '@/lib/steps';
+import type { UploadResult } from '@/lib/api';
 import { ParamsTable } from './ParamsTable';
+import { StepFileUpload } from './StepFileUpload';
 
 interface Props {
   step: PipelineStep;
@@ -10,6 +12,8 @@ interface Props {
   onCta: () => void;
   isLast: boolean;
   advancing?: boolean;
+  jobId?: string | null;
+  onUploaded?: (r: UploadResult) => void;
 }
 
 const BADGE_LABELS: Record<string, string> = {
@@ -21,7 +25,9 @@ const BADGE_LABELS: Record<string, string> = {
   jig: 'jig',
 };
 
-export function StepItem({ step, active, completed, onActivate, onCta, isLast, advancing }: Props) {
+export function StepItem({
+  step, active, completed, onActivate, onCta, isLast, advancing, jobId, onUploaded,
+}: Props) {
   return (
     <div
       className={`step-item${active ? ' step-active' : ''}${completed ? ' step-done' : ''}`}
@@ -42,6 +48,14 @@ export function StepItem({ step, active, completed, onActivate, onCta, isLast, a
       {active && (
         <div className="step-body">
           <p className="step-desc">{step.desc}</p>
+
+          {step.id === 1 && (
+            <StepFileUpload
+              jobId={jobId ?? null}
+              onUploaded={r => onUploaded?.(r)}
+            />
+          )}
+
           <ParamsTable params={step.params} />
           {step.refCite && (
             <p className="step-ref">{step.refCite}</p>

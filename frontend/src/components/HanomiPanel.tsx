@@ -9,7 +9,7 @@ import { buildSteps } from '@/lib/steps';
 import { getAlloyById, type Alloy } from '@/lib/alloys';
 import { getPressById, type Press } from '@/lib/presses';
 import { ORANGE } from '@/lib/constants';
-import { api, type Job, jobStatusToStep } from '@/lib/api';
+import { api, type Job, type UploadResult, jobStatusToStep } from '@/lib/api';
 import type { SceneHandle } from '@/hooks/useScene';
 
 const DEFAULT_ALLOY = getAlloyById('duplex_2507');
@@ -22,12 +22,20 @@ export function HanomiPanel() {
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const sceneRef = useRef<SceneHandle | null>(null);
   const jobCreatingRef = useRef(false);
 
-  const steps = buildSteps(alloy, press);
+  const rawSteps = buildSteps(alloy, press);
+  const steps = uploadedFile
+    ? rawSteps.map(s =>
+        s.id === 1
+          ? { ...s, params: s.params.map(p => p.k === 'file' ? { ...p, v: uploadedFile } : p) }
+          : s
+      )
+    : rawSteps;
 
   // Create a job whenever alloy or press changes
   useEffect(() => {
@@ -82,9 +90,16 @@ export function HanomiPanel() {
     }
   }
 
+  function handleUploaded(r: UploadResult) {
+    setUploadedFile(r.file_name);
+    // update local job file name immediately
+    setJob(prev => prev ? { ...prev, step_file_name: r.file_name } : prev);
+  }
+
   function handleAlloyChange(a: Alloy) {
     setAlloy(a);
     setJob(null);
+    setUploadedFile(null);
     setCompletedSteps(new Set());
     setActiveStep(1);
     sceneRef.current?.showStep(1);
@@ -93,6 +108,7 @@ export function HanomiPanel() {
   function handlePressChange(p: Press) {
     setPress(p);
     setJob(null);
+    setUploadedFile(null);
     setCompletedSteps(new Set());
     setActiveStep(1);
     sceneRef.current?.showStep(1);
@@ -158,6 +174,8 @@ export function HanomiPanel() {
               onCta={() => handleCta(step.id)}
               isLast={step.id === 6}
               advancing={advancing && activeStep === step.id}
+              jobId={job?.id ?? null}
+              onUploaded={handleUploaded}
             />
           ))}
         </div>

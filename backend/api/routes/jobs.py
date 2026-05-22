@@ -1,10 +1,17 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+import os
+import shutil
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 from db.database import get_db
 from api.models.job import Job, JobStatus
+
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "uploads"))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_EXTENSIONS = {".step", ".stp"}
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -108,6 +115,57 @@ def update_params(job_id: str, params: dict, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(job)
     return job
+
+
+@router.post("/{job_id}/upload")
+def upload_step_file(
+    job_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Accept a .step / .stp file, persist it, and attach to the job."""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Only .step / .stp files accepted, got '{ext or 'no extension'}'"
+        )
+
+    max_bytes = 512 * 1024 * 1024  # 512 MB
+    job_dir = UPLOAD_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = f"{uuid.uuid4().hex}{ext}"
+    dest = job_dir / safe_name
+
+    total = 0
+    with dest.open("wb") as out:
+        while chunk := file.file.read(1024 * 256):
+            total += len(chunk)
+            if total > max_bytes:
+                dest.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="File exceeds 512 MB limit")
+            out.write(chunk)
+
+    job.step_file_name = file.filename
+    existing = job.step_params or {}
+    existing["step_file_path"] = str(dest)
+    existing["step_file_size_bytes"] = total
+    existing["step_original_name"] = file.filename
+    job.step_params = existing
+    db.commit()
+    db.refresh(job)
+    return {
+        "job_id": job.id,
+        "file_name": file.filename,
+        "saved_as": safe_name,
+        "size_bytes": total,
+        "status": job.status,
+    }
 
 
 def _default_acceptance_criteria(alloy_id: str) -> list:
